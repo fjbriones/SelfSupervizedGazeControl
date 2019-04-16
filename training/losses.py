@@ -8,7 +8,8 @@ def kl_loss(y_true, y_pred):
 	z_mean = y_pred[:,0:length]
 	z_log_var = y_pred[:,length:]
 
-	loss = K.mean(-0.5 * K.sum(1 + K.clip(z_log_var, -10, 10) - K.square(z_mean) - K.exp(K.clip(z_log_var, -10, 10)), axis=-1))
+	loss = K.mean(-0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1))
+	# loss = K.mean(-0.5 * K.sum(1 + K.clip(z_log_var, -10, 10) - K.square(z_mean) - K.exp(K.clip(z_log_var, -10, 10)), axis=-1))
 	return loss
 
 def mean_gaussian_negative_log_likelihood(y_true, y_pred):

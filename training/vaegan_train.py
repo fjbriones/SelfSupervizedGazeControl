@@ -195,7 +195,7 @@ def train(args):
 
 
 if __name__=="__main__":
-	parser = argparse.ArgumentParser(description='Train the network')
+	parser = argparse.ArgumentParser(description='Train the vaegan network')
 	parser.add_argument('-b', '--batch_size', type=int, default=64)
 	parser.add_argument('-l', '--latent_dimension', type=int, default=128)
 	parser.add_argument('-lr', '--learning_rate', type=float, default=0.0003)
@@ -207,7 +207,3 @@ if __name__=="__main__":
 	args = parser.parse_args()
 
 	train(args)
-
-	# im_gen = image_generator(mode=0)
-	# while(True):
-	# 	next(im_gen)

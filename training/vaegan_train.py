@@ -5,10 +5,12 @@ from generator.vaegan_generator import image_generator, discriminator_data, gene
 from models.vaegan_models import discriminator, generator, encoder, build_vaegan_graph
 from keras.optimizers import Adam, RMSprop
 from keras.utils import plot_model
-from losses import kl_loss, mean_gaussian_negative_log_likelihood
+from training.losses import kl_loss, mean_gaussian_negative_log_likelihood
 from utils.utils import count_celeba_data
 import numpy as np
+import keras.backend as K
 import argparse
+import cv2
 
 def train(args):
 	# optimizer = Adam(lr=args.learning_rate)
@@ -70,9 +72,9 @@ def train(args):
 	enc.trainable = True
 	gen.trainable = False
 	dis.trainable = False
-	encoder_train.compile(optimizer, 
-		[kl_loss],
-		loss_weights=[1.])
+	encoder_train.compile(optimizer)#, 
+		# [kl_loss],
+		# loss_weights=[1.])
 	print("\n\n\n-------------------------------- Encoder Train Summary --------------------------------\n")
 	encoder_train.summary()
 	plot_model(encoder_train, to_file='../models/encoder_train.png')
@@ -84,19 +86,24 @@ def train(args):
 	initial_epoch = args.load_epoch + 1
 
 	if args.load_epoch>0:
-		discriminator_train.load_weights('models/discriminator.{:03d}.h5'.format(args.load_epoch))
-		generator_train.load_weights('models/generator.{:03d}.h5'.format(args.load_epoch))
-		encoder_train.load_weights('models/encoder.{:03d}.h5'.format(args.load_epoch))
+		discriminator_train.load_weights('../weights/vaegan.discriminator.{:03d}.h5'.format(args.load_epoch))
+		# generator_train.load_weights('../weights/vaegan.generator.{:03d}.h5'.format(args.load_epoch))
+		# encoder_train.load_weights('../weights/vaegan.encoder.{:03d}.h5'.format(args.load_epoch))
+		gen.load_weights('../weights/vaegan.gen.{:03d}.h5'.format(args.load_epoch))
+		enc.load_weights('../weights/vaegan.enc.{:03d}.h5'.format(args.load_epoch))
 		print('Loaded weights {:03d}'.format(args.load_epoch))
-
-	images_loader_train = image_generator(mode=0)
-	images_loader_val = image_generator(mode=1)
 
 	seed = 0
 	rng = np.random.RandomState(seed)
 
+	# images_list_train = images_list()
+	# images_list_val = images_list(mode=1)
+
+	images_loader_train = image_generator(mode=0, rng=rng, batch_size=args.batch_size)
+	images_loader_val = image_generator(mode=1, rng=rng, batch_size=args.batch_size)
+	
 	for i in range(args.load_epoch+1, args.epoch+1):
-		enc_losses_avg = np.zeros((3))
+		enc_losses_avg = 0#np.zeros((3))
 		gen_losses_avg = np.zeros((3))
 		dis_losses_avg = np.zeros((4))
 
@@ -120,10 +127,14 @@ def train(args):
 				rng=rng,
 				latent_dimension=args.latent_dimension)
 
-			enc_losses = encoder_train.train_on_batch(enc_inputs, enc_outputs)
-			gen_losses = generator_train.train_on_batch(gen_inputs, gen_outputs)
 			dis_losses = discriminator_train.train_on_batch(dis_inputs, dis_outputs)
-		
+			gen_losses = generator_train.train_on_batch(gen_inputs, gen_outputs)
+			enc_losses = encoder_train.train_on_batch(enc_inputs, enc_outputs)
+
+			# print(dis_losses)
+			# print(gen_losses)
+			# print(enc_losses)
+			
 			m = 0
 			for loss in dis_losses:
 				dis_losses_avg[m] = (dis_losses_avg[m] * j + loss)/(j + 1)
@@ -134,24 +145,43 @@ def train(args):
 				gen_losses_avg[m] = (gen_losses_avg[m] * j + loss)/(j + 1)
 				m = m + 1
 
+			enc_losses_avg = (enc_losses_avg * j + enc_losses)/(j + 1)
 			# m = 0
 			# for loss in enc_losses:
 				# enc_losses_avg[m] = (enc_losses_avg[m] * j + loss)/(j + 1)
 				# m = m + 1
 
-			print('\rEpoch {:03d} Step {:04d} of {:04d}. D_real: {:.4f} D_z_vae: {:.4f} D_z_p {:.4f} G_z_vae_gan: {:.4f} G_z_p_gan: {:.4f}'.format(i, j, train_steps, dis_losses_avg[1], dis_losses_avg[2], dis_losses_avg[3], gen_losses_avg[1], gen_losses_avg[2]), end="", flush=True)
+			print('\rEpoch {:03d} Step {:04d} of {:04d}. D_real: {:.4f} D_z_vae: {:.4f} D_z_p {:.4f} G_z_vae_gan: {:.4f} G_z_p_gan: {:.4f} Dis_loss: {:.4f} Gen_loss: {:.4f} Enc_loss: {:.4f}'.format(i, j, train_steps, dis_losses_avg[1], dis_losses_avg[2], dis_losses_avg[3], gen_losses_avg[1], gen_losses_avg[2], dis_losses_avg[0], gen_losses_avg[0], enc_losses_avg), end="", flush=True)
 
-		print('\nSaving models')
+		encoder_train.optimizer.lr = encoder_train.optimizer.lr * 0.95
+		print('\nLearning rate is now {:.6f}'.format(K.eval(encoder_train.optimizer.lr)))
+
+		print('Saving models')
 		discriminator_train.save_weights('../weights/vaegan.discriminator.{:03d}.h5'.format(i))
 		generator_train.save_weights('../weights/vaegan.generator.{:03d}.h5'.format(i))
 		encoder_train.save_weights('../weights/vaegan.encoder.{:03d}.h5'.format(i))
 		enc.save('../weights/vaegan.enc.{:03d}.h5'.format(i))
 		gen.save('../weights/vaegan.gen.{:03d}.h5'.format(i))
 
-		enc_losses_avg = np.zeros_like(enc_losses_avg)
+		enc_losses_avg = 0#np.zeros_like(enc_losses_avg)
 		gen_losses_avg = np.zeros_like(gen_losses_avg)
 		dis_losses_avg = np.zeros_like(dis_losses_avg)
 
+		z = rng.normal(size=(args.batch_size, args.latent_dimension))
+		generator_output = ((np.squeeze(gen.predict_on_batch(z)) + 1.0)*127.5).astype(np.uint8)
+		display_tiles = int(np.sqrt(args.batch_size))
+		display_box = np.zeros((display_tiles*generator_output.shape[1], display_tiles*generator_output.shape[2], generator_output.shape[3]))
+		for m in range(display_tiles):
+			for n in range(display_tiles):
+				# cv2.imshow('result', generator_output[i*display_tiles+j])
+				# cv2.waitKey(0)
+				# cv2.destroyAllWindows()
+				display_box[m*generator_output.shape[1]:(m+1)*generator_output.shape[1], n*generator_output.shape[2]:(n+1)*generator_output.shape[2],:] = generator_output[m*display_tiles+n]
+
+		# cv2.imshow('Result {:03d}'.format(i), display_box)
+		# cv2.waitKey(5)
+		cv2.imwrite('../results/vaegan/epoch.{:03d}.jpg'.format(i), display_box)
+		
 		print('Evaluating the model')
 		for j in range(val_steps):
 			images_batch = next(images_loader_val)
@@ -185,12 +215,13 @@ def train(args):
 				gen_losses_avg[m] = (gen_losses_avg[m] * j + loss)/(j + 1)
 				m = m + 1
 
+			enc_losses_avg = (enc_losses_avg * j + enc_losses)/(j + 1)
 			# m = 0
 			# for loss in enc_losses:
 			# 	enc_losses_avg[m] = (enc_losses_avg[m] * j + loss)/(j + 1)
 			# 	m = m + 1
 
-			print('\rEpoch {:03d} Eval Step {:04d} of {:04d}. D_real: {:.4f} D_z_vae: {:.4f} D_z_p {:.4f} G_z_vae_gan: {:.4f} G_z_p_gan: {:.4f}'.format(i, j, val_steps, dis_losses_avg[1], dis_losses_avg[2], dis_losses_avg[3], gen_losses_avg[1], gen_losses_avg[2]), end="", flush=True)
+			print('\rEpoch {:03d} Eval Step {:04d} of {:04d}. D_real: {:.4f} D_z_vae: {:.4f} D_z_p {:.4f} G_z_vae_gan: {:.4f} G_z_p_gan: {:.4f} Dis_loss: {:.4f} Gen_loss: {:.4f} Enc_loss: {:.4f}'.format(i, j, val_steps, dis_losses_avg[1], dis_losses_avg[2], dis_losses_avg[3], gen_losses_avg[1], gen_losses_avg[2], dis_losses_avg[0], gen_losses_avg[0], enc_losses_avg), end="", flush=True)
 		print('\n')
 
 

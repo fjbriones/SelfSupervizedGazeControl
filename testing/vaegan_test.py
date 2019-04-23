@@ -14,21 +14,26 @@ def test(args):
 	gen = load_model(args.generator_model)
 	enc = load_model(args.encoder_model)
 	enc_z = build_test_encoder(enc)
-	images_loader_test = image_generator(mode=2)
+	images_loader_test = image_generator(mode=2, rng=rng, batch_size=args.batch_size)
 	while(True):
 		if(args.use_encoder):
 			images_batch = next(images_loader_test)
 			z = np.squeeze(enc_z.predict_on_batch(images_batch))
 		else:
 			z = rng.normal(size=(args.batch_size, args.latent_dimension))
+			# z = np.zeros_like(z)
 
-		generator_output = np.squeeze(gen.predict_on_batch(z))
+		generator_output = ((np.squeeze(gen.predict_on_batch(z)) + 1.0)/2.0)#.astype(np.uint8)
 
 		display_tiles = int(np.sqrt(args.batch_size))
-		display_box = np.empty((display_tiles*generator_output.shape[1], display_tiles*generator_output.shape[2], generator_output.shape[3]))
+		display_box = np.zeros((display_tiles*generator_output.shape[1], display_tiles*generator_output.shape[2], generator_output.shape[3]))
 
 		for i in range(display_tiles):
 			for j in range(display_tiles):
+
+				# cv2.imshow('result', generator_output[i*display_tiles+j])
+				# cv2.waitKey(0)
+				# cv2.destroyAllWindows()
 				display_box[i*generator_output.shape[1]:(i+1)*generator_output.shape[1], j*generator_output.shape[2]:(j+1)*generator_output.shape[2],:] = generator_output[i*display_tiles+j]
 
 		cv2.imshow('results', display_box)
@@ -40,8 +45,8 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Test the vaegan network')
 	parser.add_argument('-b', '--batch_size', type=int, default=64)
 	parser.add_argument('-l', '--latent_dimension', type=int, default=128)
-	parser.add_argument('-gm', '--generator_model', type=str, default='../weights/vaegan.gen.020.h5')
-	parser.add_argument('-em', '--encoder_model', type=str, default='../weights/vaegan.enc.050.h5')
+	parser.add_argument('-gm', '--generator_model', type=str, default='../weights/vaegan.gen.030.h5')
+	parser.add_argument('-em', '--encoder_model', type=str, default='../weights/vaegan.enc.030.h5')
 	parser.add_argument('-ue', '--use_encoder', action='store_true')
 	args = parser.parse_args()
 

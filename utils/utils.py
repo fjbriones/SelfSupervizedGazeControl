@@ -87,3 +87,4 @@ def set_trainable(model, trainable):
 	model.trainable = trainable
 	for layer in model.layers:
 		layer.trainable = trainable
+

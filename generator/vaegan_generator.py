@@ -24,7 +24,7 @@ import random
 
 	# return image_list
 
-def image_generator(
+def celeba_image_generator(
 	rng,
 	mode,
 	images_partition_file='../data/celeba-dataset/list_eval_partition.csv',
@@ -63,6 +63,48 @@ def image_generator(
 					# cv2.destroyAllWindows()
 					images_batch_list = []
 					yield images_batch_array
+
+def humanm_image_generator(
+	video_dir,
+	batch_size=64,
+	image_height=64,
+	image_width=64,
+	image_channels=3,
+	crop_height=224,
+	crop_width=112):
+	while(True):
+		video_frames_dir = os.path.join(video_dir, '*_act_14_*/*.jpg')
+		video_frames = glob.glob(video_frames_dir)
+
+		images_batch_list= []
+
+		for frame in video_frames:
+			
+			img = cv2.imread(frame, cv2.IMREAD_COLOR)
+
+			height = img.shape[0]
+			width = img.shape[1]
+
+			#Height start at 0, cut image in half crosswise
+			height_start = 0
+			#Width start is half the crop width
+			width_start = int((width - crop_width)/2)
+
+			cropped_frame = img[height_start:height_start + crop_height, width_start:width_start + crop_width]
+			# cv2.imshow('img', cropped_frame)
+			# cv2.waitKey(0)
+			resized_frame = (cv2.resize(cropped_frame, (image_width, image_height))/127.5) - 1.0
+
+			images_batch_list.append(resized_frame)
+
+			if (len(images_batch_list) == batch_size):
+				images_batch_array = np.array(images_batch_list)
+				# print(images_batch_array.shape)
+				images_batch_array = np.clip(images_batch_array, -1., 1.)
+				images_batch_list = []
+				yield images_batch_array
+
+
 
 def discriminator_data(
 	images_batch,

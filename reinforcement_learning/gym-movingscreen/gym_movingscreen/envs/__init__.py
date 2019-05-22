@@ -1,0 +1,3 @@
+# from gym_movingscreen.envs.movingscreen_env import MovingScreenEnv
+from gym_movingscreen.envs.movingscreen_env_xy import MovingScreenEnvXY
+from gym_movingscreen.envs.movingscreen_env_face import MovingScreenEnvFace

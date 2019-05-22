@@ -1,6 +1,5 @@
-from utils import write_to_video, make_dir
+from utils.utils import write_to_video, make_dir
 import cv2
-import youtube_dl
 import json
 import argparse
 import os
@@ -34,7 +33,11 @@ def video_generator(video_dir,
 			key_frame_id = 1;
 			img_filename = video_folder + "/" + key + "_{:06d}.jpg".format(key_frame_id)
 			# print(img_filename)
-			img = cv2.imread(img_filename, cv2.IMREAD_COLOR)
+			if (frame_channels==1):
+				color = cv2.IMREAD_GRAYSCALE
+			else:
+				color = cv2.IMREAD_COLOR
+			img = cv2.imread(img_filename, color)
 			
 			while img is not None:
 				height = img.shape[0]
@@ -49,8 +52,11 @@ def video_generator(video_dir,
 				# cv2.imshow('cropped', cropped_frame)
 				# cv2.waitKey(0)
 				resized_frame = cv2.resize(cropped_frame, (frame_width, frame_height))/255.
+				# print(resized_frame.shape)
+				
 				if frame_channels == 1:
 					resized_frame = np.expand_dims(resized_frame, axis=2)
+
 				if i == 0:
 					current_frames[batch_count,i,:,:,:] = resized_frame
 				elif i < time:
@@ -71,7 +77,7 @@ def video_generator(video_dir,
 				key_frame_id += 5
 				img_filename = video_folder + "/" + key + "_{:06d}.jpg".format(key_frame_id)
 				# print(img_filename)
-				img = cv2.imread(img_filename, cv2.IMREAD_COLOR)
+				img = cv2.imread(img_filename, color)
 
 		# for video in videos:
 		# 	# print(video)

@@ -1,12 +1,12 @@
 import sys
 sys.path.append('../')
 
-from generator.vaegan_generator import image_generator, discriminator_data, generator_data, encoder_data
+from generator.vaegan_generator import celeba_image_generator, humanm_image_generator, discriminator_data, generator_data, encoder_data
 from models.vaegan_models import discriminator, generator, encoder, build_vaegan_graph
 from keras.optimizers import Adam, RMSprop
 from keras.utils import plot_model
 from training.losses import kl_loss, mean_gaussian_negative_log_likelihood
-from utils.utils import count_celeba_data
+from utils.utils import count_celeba_data, count_humanm_data
 import numpy as np
 import keras.backend as K
 import argparse
@@ -37,9 +37,9 @@ def train(args):
 	print("\n\n\n-------------------------------- Discriminator Summary --------------------------------\n")
 	dis.summary()
 
-	plot_model(enc, to_file='../models/vaegan_encoder.png')
-	plot_model(gen, to_file='../models/vaegan_generator.png')
-	plot_model(dis, to_file='../models/vaegan_discriminator.png')
+	plot_model(enc, to_file='../models/vaegan_encoder.png', show_shapes=True)
+	plot_model(gen, to_file='../models/vaegan_generator.png', show_shapes=True)
+	plot_model(dis, to_file='../models/vaegan_discriminator.png', show_shapes=True)
 
 	encoder_train, generator_train, discriminator_train = build_vaegan_graph(
 		encoder=enc,
@@ -57,7 +57,7 @@ def train(args):
 		loss_weights=[1., 1., 1.])
 	print("\n\n\n-------------------------------- Discriminator Train Summary --------------------------------\n")
 	discriminator_train.summary()
-	plot_model(discriminator_train, to_file='../models/vaegan_discriminator_train.png')
+	plot_model(discriminator_train, to_file='../models/vaegan_discriminator_train.png', show_shapes=True)
 
 	enc.trainable = False
 	gen.trainable = True
@@ -67,7 +67,7 @@ def train(args):
 		loss_weights=[1., 1.])
 	print("\n\n\n-------------------------------- Generator Train Summary --------------------------------\n")
 	generator_train.summary()
-	plot_model(generator_train, to_file='../models/vaegan_generator_train.png')
+	plot_model(generator_train, to_file='../models/vaegan_generator_train.png', show_shapes=True)
 
 	enc.trainable = True
 	gen.trainable = False
@@ -77,11 +77,9 @@ def train(args):
 		# loss_weights=[1.])
 	print("\n\n\n-------------------------------- Encoder Train Summary --------------------------------\n")
 	encoder_train.summary()
-	plot_model(encoder_train, to_file='../models/encoder_train.png')
+	plot_model(encoder_train, to_file='../models/encoder_train.png', show_shapes=True)
 
-	#Count training data
-	train_steps = count_celeba_data(mode=0, batch_size=args.batch_size)
-	val_steps = count_celeba_data(mode=1, batch_size=args.batch_size)
+	
 
 	initial_epoch = args.load_epoch + 1
 
@@ -99,15 +97,30 @@ def train(args):
 	# images_list_train = images_list()
 	# images_list_val = images_list(mode=1)
 
-	images_loader_train = image_generator(mode=0, rng=rng, batch_size=args.batch_size)
-	images_loader_val = image_generator(mode=1, rng=rng, batch_size=args.batch_size)
+	if (args.dataset == 'celeba'):
+		#Count training data
+		train_steps = count_celeba_data(mode=0, batch_size=args.batch_size)
+		val_steps = count_celeba_data(mode=1, batch_size=args.batch_size)
+		#loaders
+		images_loader_train = celeba_image_generator(mode=0, rng=rng, batch_size=args.batch_size)
+		images_loader_val = celeba_image_generator(mode=1, rng=rng, batch_size=args.batch_size)
+	elif(args.dataset == 'humanm'):
+		#Count training data
+		train_steps = count_humanm_data(video_dir='../data/Human3.6M/train', batch_size=args.batch_size)
+		val_steps = count_humanm_data(video_dir='../data/Human3.6M/val', batch_size=args.batch_size)
+		# print(train_steps)
+		#loaders
+		images_loader_train = humanm_image_generator(video_dir='../data/Human3.6M/train', batch_size=args.batch_size)
+		images_loader_val = humanm_image_generator(video_dir='../data/Human3.6M/val', batch_size=args.batch_size)
+
+
 	
 	for i in range(args.load_epoch+1, args.epoch+1):
 		enc_losses_avg = 0#np.zeros((3))
 		gen_losses_avg = np.zeros((3))
 		dis_losses_avg = np.zeros((4))
 
-		# print("\nEpoch {:03d} \n".format(i))
+		# print("\nEpoch {:03d}".format(i))
 
 		for j in range(train_steps):
 			images_batch = next(images_loader_train)
@@ -235,6 +248,7 @@ if __name__=="__main__":
 	parser.add_argument('-fc', '--image_channels', type=int, default=3)
 	parser.add_argument('-e', '--epoch', type=int, default=1000)
 	parser.add_argument('-le', '--load_epoch', type=int, default=0)
+	parser.add_argument('-d', '--dataset', choices=['celeba', 'humanm'], default='humanm')
 	args = parser.parse_args()
 
 	train(args)

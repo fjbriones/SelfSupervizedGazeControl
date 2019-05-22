@@ -82,6 +82,14 @@ def count_celeba_data(
 			line_count += 1
 		return int(count/batch_size)
 
+def count_humanm_data(
+	video_dir, 
+	batch_size=64):
+	video_folders_dir = os.path.join(video_dir, '*_act_14_*/*.jpg')
+	video_frames = glob.glob(video_folders_dir)
+	count = len(video_frames)
+	return int(count/batch_size)
+
 
 def set_trainable(model, trainable):
 	model.trainable = trainable

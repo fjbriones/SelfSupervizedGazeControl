@@ -1,15 +1,17 @@
-from data_generator import video_generator, discriminator_loader, generator_loader, encoder_loader
-from data_generator import discriminator_data, generator_data, encoder_data
-from models import trial_predictor, encoder, generator, build_graph
-from models import discriminator
+import sys
+sys.path.append('../')
+
+from generator.savp_generator import video_generator, discriminator_loader, generator_loader, encoder_loader
+from generator.savp_generator import discriminator_data, generator_data, encoder_data
+from models.savp_models import trial_predictor, encoder, generator, build_graph
+from models.savp_models import discriminator
 from keras.models import Model
 from keras.layers import Input
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from keras.optimizers import RMSprop, Adam
 from keras.utils import plot_model
 import keras.backend as K
-from callbacks import ModelsCheckpoint
-from utils import count_images, count_frames
+from utils.utils import count_images, count_frames
 from losses import kl_loss
 import argparse
 import numpy as np
@@ -42,9 +44,9 @@ def main(args):
 	print("\n\n\n-------------------------------- Discriminator Summary --------------------------------\n")
 	dis_gan.summary()
 
-	plot_model(enc, to_file='models/encoder.png')
-	plot_model(gen, to_file='models/generator.png')
-	plot_model(dis_gan, to_file='models/discriminator.png')
+	plot_model(enc, to_file='../models/savp_encoder.png', show_shapes=True)
+	plot_model(gen, to_file='../models/savp_generator.png', show_shapes=True)
+	plot_model(dis_gan, to_file='../models/savp_discriminator.png', show_shapes=True)
 	
 	encoder_train, generator_train, discriminator_train, vaegan= build_graph(
 		encoder=enc, 
@@ -66,7 +68,7 @@ def main(args):
 	print("\n\n\n-------------------------------- Discriminator Train Summary --------------------------------\n")
 	discriminator_train.summary()
 
-	plot_model(discriminator_train, to_file='models/discriminator_train.png')
+	plot_model(discriminator_train, to_file='../models/savp_discriminator_train.png', show_shapes=True)
 
 	set_trainable(dis_vae, False)
 	set_trainable(dis_gan, False)
@@ -77,7 +79,7 @@ def main(args):
 	print("\n\n\n-------------------------------- Generator Train Summary --------------------------------\n")
 	generator_train.summary()
 
-	plot_model(generator_train, to_file='models/generator_train.png')
+	plot_model(generator_train, to_file='../models/savp_generator_train.png', show_shapes=True)
 
 	set_trainable(gen, False)
 	set_trainable(enc, True)
@@ -87,7 +89,7 @@ def main(args):
 	print("\n\n\n-------------------------------- Encoder Train Summary --------------------------------\n")
 	encoder_train.summary()
 
-	plot_model(encoder_train, to_file='models/encoder_train.png')
+	plot_model(encoder_train, to_file='../models/savp_encoder_train.png', show_shapes=True)
 
 	#Determine the steps per epoch for training
 	train_video_dir = os.path.join(args.train_directory, '*_act_14_*/*.jpg')
@@ -114,9 +116,9 @@ def main(args):
 	l = 0
 
 	if args.load_epoch>0:
-		discriminator_train.load_weights('models/discriminator.{:03d}.h5'.format(args.load_epoch))
-		generator_train.load_weights('models/generator.{:03d}.h5'.format(args.load_epoch))
-		encoder_train.load_weights('models/encoder.{:03d}.h5'.format(args.load_epoch))
+		discriminator_train.load_weights('../weights/savp.discriminator.{:03d}.h5'.format(args.load_epoch))
+		generator_train.load_weights('../weights/savp.generator.{:03d}.h5'.format(args.load_epoch))
+		encoder_train.load_weights('../weights/savp.encoder.{:03d}.h5'.format(args.load_epoch))
 		print('Loaded weights {:03d}'.format(args.load_epoch))
 		l = args.load_epoch * steps_per_epoch * (args.time - 1)*args.batch_size
 
@@ -148,6 +150,7 @@ def main(args):
 			dis_inputs, dis_outputs = discriminator_data(x, y, latent_dim=args.latent_dim, seed=seed, time_init=args.time)
 			gen_inputs, gen_outputs = generator_data(x, y, latent_dim=args.latent_dim, seed=seed, time_init=args.time)
 			enc_inputs, enc_outputs = encoder_data(x, y, latent_dim=args.latent_dim, seed=seed, time_init=args.time)
+			# print(enc_outputs[0].shape)
 
 			# if j == 0:
 				# previous_inputs = np.zeros_like(gen_outputs[2])
@@ -203,11 +206,11 @@ def main(args):
 			generator_train.optimizer.lr = generator_train.optimizer.lr/10
 			print("\nCurrent learning rate is now: {}".format(K.eval(encoder_train.optimizer.lr)))
 
-		print('\nSaving models\n')
-		discriminator_train.save_weights('models/discriminator.{:03d}.h5'.format(i))
-		generator_train.save_weights('models/generator.{:03d}.h5'.format(i))
-		encoder_train.save_weights('models/encoder.{:03d}.h5'.format(i))
-		enc.save('models/enc.{:03d}.h5'.format(i))
+		print('\nSaving models')
+		discriminator_train.save_weights('../weights/savp.discriminator.{:03d}.h5'.format(i))
+		generator_train.save_weights('../weights/savp.generator.{:03d}.h5'.format(i))
+		encoder_train.save_weights('../weights/savp.encoder.{:03d}.h5'.format(i))
+		enc.save('../weights/savp.enc.{:03d}.h5'.format(i))
 
 		dis_losses_avg = np.zeros((5))
 		gen_losses_avg = np.zeros((4))
@@ -227,7 +230,7 @@ def main(args):
 			camera_fps = args.camera_fps,
 			json_filename = "kinetics_val.json")
 
-		print('\nEvaluating the model')
+		print('Evaluating the model')
 		for j in range(val_steps):
 			
 			x, y = next(video_loader_val)
@@ -338,8 +341,8 @@ def main_trial(args):
 
 if __name__=="__main__":
 	parser = argparse.ArgumentParser(description='Train the network')
-	parser.add_argument('-t', '--train_directory', type=str, default='data/kth_train')
-	parser.add_argument('-v', '--val_directory', type=str, default='data/kth_val')
+	parser.add_argument('-t', '--train_directory', type=str, default='../data/Human3.6M/train')
+	parser.add_argument('-v', '--val_directory', type=str, default='../data/Human3.6M/val')
 	parser.add_argument('-b', '--batch_size', type=int, default=1)
 	parser.add_argument('-e', '--epochs', type=int, default=50)
 	parser.add_argument('-i', '--time', type=int, default=5)
@@ -349,9 +352,9 @@ if __name__=="__main__":
 	parser.add_argument('-k', type=float, default=500000.)
 	parser.add_argument('-lr', '--learning_rate', type=float, default=0.001)
 	parser.add_argument('-c', '--camera_fps', type=int, default=10)
-	parser.add_argument('-fh', '--frame_height', type=int, default=128)
-	parser.add_argument('-fw', '--frame_width', type=int, default=128)
-	parser.add_argument('-fc', '--frame_channels', type=int, default=3)
+	parser.add_argument('-fh', '--frame_height', type=int, default=64)
+	parser.add_argument('-fw', '--frame_width', type=int, default=64)
+	parser.add_argument('-fc', '--frame_channels', type=int, default=1)
 	args = parser.parse_args()
 
 	if args.trial:

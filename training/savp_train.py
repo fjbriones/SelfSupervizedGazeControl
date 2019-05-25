@@ -11,7 +11,7 @@ from keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from keras.optimizers import RMSprop, Adam
 from keras.utils import plot_model
 import keras.backend as K
-from utils.utils import count_images, count_frames
+from utils.utils import count_images, count_frames, set_trainable
 from losses import kl_loss
 import argparse
 import numpy as np
@@ -19,11 +19,6 @@ import math
 import cv2
 import os
 import glob
-
-def set_trainable(model, trainable):
-	model.trainable = trainable
-	for layer in model.layers:
-		layer.trainable = trainable
 
 def main(args):
 	optimizer = Adam()
@@ -354,7 +349,7 @@ if __name__=="__main__":
 	parser.add_argument('-c', '--camera_fps', type=int, default=10)
 	parser.add_argument('-fh', '--frame_height', type=int, default=64)
 	parser.add_argument('-fw', '--frame_width', type=int, default=64)
-	parser.add_argument('-fc', '--frame_channels', type=int, default=1)
+	parser.add_argument('-fc', '--frame_channels', type=int, default=3)
 	args = parser.parse_args()
 
 	if args.trial:

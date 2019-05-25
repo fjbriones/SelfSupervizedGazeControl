@@ -1,4 +1,4 @@
-from keras.layers import Conv2D, Activation, BatchNormalization, MaxPooling2D, Dense, Flatten, Conv2DTranspose, UpSampling2D, LeakyReLU, Reshape, Lambda, Input, Concatenate
+from keras.layers import Conv2D, Activation, BatchNormalization, MaxPooling2D, Dense, Flatten, Conv2DTranspose, UpSampling2D, LeakyReLU, Reshape, Lambda, Input, Concatenate, DepthwiseConv2D, Add, GlobalAveragePooling2D
 from models.SpectralNormalizationKeras import DenseSN, ConvSN2D
 from keras.models import Model
 from keras.regularizers import l2
@@ -143,6 +143,89 @@ def generator(
 
 	return Model(inputs=generator_input, outputs=generator_output, name='generator')
 
+def _conv_block(inputs, filters, kernel, strides):
+	"""Convolution Block
+	This function defines a 2D convolution operation with BN and relu6.
+	# Arguments
+	inputs: Tensor, input tensor of conv layer.
+	filters: Integer, the dimensionality of the output space.
+	kernel: An integer or tuple/list of 2 integers, specifying the
+	width and height of the 2D convolution window.
+	strides: An integer or tuple/list of 2 integers,
+	specifying the strides of the convolution along the width and height.
+	Can be a single integer to specify the same value for
+	all spatial dimensions.
+	# Returns
+	Output tensor.
+	"""
+
+	channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
+
+	x = Conv2D(filters, kernel, padding='same', strides=strides)(inputs)
+	x = BatchNormalization(axis=channel_axis)(x)
+	return Activation('relu')(x)
+
+
+def _bottleneck(inputs, filters, kernel, t, s, r=False):
+	"""Bottleneck
+	This function defines a basic bottleneck structure.
+	# Arguments
+	inputs: Tensor, input tensor of conv layer.
+	filters: Integer, the dimensionality of the output space.
+	kernel: An integer or tuple/list of 2 integers, specifying the
+	width and height of the 2D convolution window.
+	t: Integer, expansion factor.
+	t is always applied to the input size.
+	s: An integer or tuple/list of 2 integers,specifying the strides
+	of the convolution along the width and height.Can be a single
+	integer to specify the same value for all spatial dimensions.
+	r: Boolean, Whether to use the residuals.
+	# Returns
+	Output tensor.
+	"""
+
+	channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
+	tchannel = K.int_shape(inputs)[channel_axis] * t
+
+	x = _conv_block(inputs, tchannel, (1, 1), (1, 1))
+
+	x = DepthwiseConv2D(kernel, strides=(s, s), depth_multiplier=1, padding='same')(x)
+	x = BatchNormalization(axis=channel_axis)(x)
+	x = Activation('relu')(x)
+
+	x = Conv2D(filters, (1, 1), strides=(1, 1), padding='same')(x)
+	x = BatchNormalization(axis=channel_axis)(x)
+
+	if r:
+		x = Add()([x, inputs])
+	return x
+
+
+def _inverted_residual_block(inputs, filters, kernel, t, strides, n):
+	"""Inverted Residual Block
+	This function defines a sequence of 1 or more identical layers.
+	# Arguments
+	inputs: Tensor, input tensor of conv layer.
+	filters: Integer, the dimensionality of the output space.
+	kernel: An integer or tuple/list of 2 integers, specifying the
+	width and height of the 2D convolution window.
+	t: Integer, expansion factor.
+	t is always applied to the input size.
+	s: An integer or tuple/list of 2 integers,specifying the strides
+	of the convolution along the width and height.Can be a single
+	integer to specify the same value for all spatial dimensions.
+	n: Integer, layer repeat times.
+	# Returns
+	Output tensor.
+	"""
+
+	x = _bottleneck(inputs, filters, kernel, t, strides)
+
+	for i in range(1, n):
+		x = _bottleneck(x, filters, kernel, t, 1, True)
+
+	return x
+
 def encoder(
 	batch_size=64,
 	latent_dimension=128,
@@ -156,43 +239,56 @@ def encoder(
 
 	encoder_input = Input(batch_shape=image_input_shape, name='encoder_image_input')
 
-	x = Conv2D(filters=64,
-		kernel_size=5,
-		strides=2,
-		padding='same',
-		name='encoder_conv_1',
-		kernel_regularizer=l2(weight_decay),
-		kernel_initializer='he_uniform')(encoder_input)
-	# x = MaxPooling2D()(x)
-	x = BatchNormalization(momentum=batch_norm_momentum,
-		epsilon=batch_norm_epsilon)(x)
-	x = LeakyReLU(alpha=leaky_relu_alpha)(x)
+	x = _conv_block(encoder_input, 32, (3, 3), strides=(2, 2))
 
-	x = Conv2D(filters=128,
-		kernel_size=5,
-		strides=2,
-		padding='same',
-		name='encoder_conv_2',
-		kernel_regularizer=l2(weight_decay),
-		kernel_initializer='he_uniform')(x)
-	# x = MaxPooling2D()(x)
-	x = BatchNormalization(momentum=batch_norm_momentum,
-		epsilon=batch_norm_epsilon)(x)
-	x = LeakyReLU(alpha=leaky_relu_alpha)(x)
+	x = _inverted_residual_block(x, 16, (3, 3), t=1, strides=1, n=1)
+	x = _inverted_residual_block(x, 24, (3, 3), t=6, strides=2, n=2)
+	x = _inverted_residual_block(x, 32, (3, 3), t=6, strides=2, n=3)
+	x = _inverted_residual_block(x, 64, (3, 3), t=6, strides=2, n=4)
+	x = _inverted_residual_block(x, 96, (3, 3), t=6, strides=1, n=3)
+	x = _inverted_residual_block(x, 160, (3, 3), t=6, strides=2, n=3)
+	x = _inverted_residual_block(x, 320, (3, 3), t=6, strides=1, n=1)
 
-	x = Conv2D(filters=256,
-		kernel_size=5,
-		strides=2,
-		padding='same',
-		name='encoder_conv_3',
-		kernel_regularizer=l2(weight_decay),
-		kernel_initializer='he_uniform')(x)
-	# x = MaxPooling2D()(x)
-	x = BatchNormalization(momentum=batch_norm_momentum,
-		epsilon=batch_norm_epsilon)(x)
-	x = LeakyReLU(alpha=leaky_relu_alpha)(x)
+	x = _conv_block(x, 1280, (1, 1), strides=(1, 1))
+	x = GlobalAveragePooling2D()(x)
 
-	x = Flatten()(x)	
+	# x = Conv2D(filters=64,
+	# 	kernel_size=5,
+	# 	strides=2,
+	# 	padding='same',
+	# 	name='encoder_conv_1',
+	# 	kernel_regularizer=l2(weight_decay),
+	# 	kernel_initializer='he_uniform')(encoder_input)
+	# # x = MaxPooling2D()(x)
+	# x = BatchNormalization(momentum=batch_norm_momentum,
+	# 	epsilon=batch_norm_epsilon)(x)
+	# x = LeakyReLU(alpha=leaky_relu_alpha)(x)
+
+	# x = Conv2D(filters=128,
+	# 	kernel_size=5,
+	# 	strides=2,
+	# 	padding='same',
+	# 	name='encoder_conv_2',
+	# 	kernel_regularizer=l2(weight_decay),
+	# 	kernel_initializer='he_uniform')(x)
+	# # x = MaxPooling2D()(x)
+	# x = BatchNormalization(momentum=batch_norm_momentum,
+	# 	epsilon=batch_norm_epsilon)(x)
+	# x = LeakyReLU(alpha=leaky_relu_alpha)(x)
+
+	# x = Conv2D(filters=256,
+	# 	kernel_size=5,
+	# 	strides=2,
+	# 	padding='same',
+	# 	name='encoder_conv_3',
+	# 	kernel_regularizer=l2(weight_decay),
+	# 	kernel_initializer='he_uniform')(x)
+	# # x = MaxPooling2D()(x)
+	# x = BatchNormalization(momentum=batch_norm_momentum,
+	# 	epsilon=batch_norm_epsilon)(x)
+	# x = LeakyReLU(alpha=leaky_relu_alpha)(x)
+
+	# x = Flatten()(x)	
 	x = Dense(1024, name='encoder_dense_1',
 		kernel_regularizer=l2(weight_decay),
 		kernel_initializer='he_uniform')(x)

@@ -6,6 +6,8 @@ def eval_kl(tensors):
 
 	kl_loss = -0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
 
+	# print(K.int_shape(z_mean))
+
 	return kl_loss
 
 def sampling(tensors):

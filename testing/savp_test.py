@@ -1,12 +1,14 @@
-from data_generator import video_generator, generator_loader, vaegan_loader, encoder_loader
-from models import trial_predictor, encoder, generator, build_graph
-from models import discriminator
+import sys
+sys.path.append('../')
+
+from generator.savp_generator import video_generator, generator_loader, vaegan_loader, encoder_loader
+from models.savp_models import trial_predictor, encoder, generator, build_graph
+from models.savp_models import discriminator
 from keras.models import Model, load_model
 from keras.layers import Input
 from keras.optimizers import RMSprop
-from train import set_trainable
-from losses import kl_loss
-from utils import write_to_video, count_frames, count_images
+from training.losses import kl_loss
+from utils.utils import write_to_video, count_frames, count_images, set_trainable
 import numpy as np
 import argparse
 import cv2
@@ -75,10 +77,10 @@ def main(args):
 
 	predict_gen = vaegan_loader(video_gen, time_init=2*args.time-1, latent_dim=args.latent_dim)
 
-	enc = encoder(time=2*args.time-1, latent_dim=args.latent_dim, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
-	gen = generator(time=args.time, latent_dim=args.latent_dim, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
-	dis_gan = discriminator(time=2*args.time-1, name='gan', frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
-	dis_vae = discriminator(time=2*args.time-1, name='vae', frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
+	enc = encoder(time=2*args.time-1, latent_dim=args.latent_dim, batch_size=args.batch_size, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
+	gen = generator(time=args.time, latent_dim=args.latent_dim, batch_size=args.batch_size, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
+	dis_gan = discriminator(time=2*args.time-1, name='gan', batch_size=args.batch_size, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
+	dis_vae = discriminator(time=2*args.time-1, name='vae', batch_size=args.batch_size, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
 
 	encoder_train, generator_train, discriminator_train, vaegan= build_graph(enc, gen, dis_gan, dis_vae, time=args.time, latent_dim=args.latent_dim, frame_channels=args.frame_channels)
 
@@ -104,9 +106,9 @@ def main(args):
 	encoder_train.summary()
 
 	if args.load_epoch>0:
-		discriminator_train.load_weights('models/discriminator.{:03d}.h5'.format(args.load_epoch))
-		generator_train.load_weights('models/generator.{:03d}.h5'.format(args.load_epoch))
-		encoder_train.load_weights('models/encoder.{:03d}.h5'.format(args.load_epoch))
+		# discriminator_train.load_weights('../weights/discriminator.{:03d}.h5'.format(args.load_epoch))
+		# generator_train.load_weights('../weights/generator.{:03d}.h5'.format(args.load_epoch))
+		encoder_train.load_weights('../weights/encoder.{:03d}.h5'.format(args.load_epoch))
 		print('Loaded weights {:03d}'.format(args.load_epoch))
 	# gen_single = generator(time=1, latent_dim=args.latent_dim, frame_height=args.frame_height, frame_width=args.frame_width, frame_channels=args.frame_channels)
 	# gen_single.compile(rmsprop, ['mean_absolute_error'])
@@ -122,20 +124,20 @@ def main(args):
 	# val_video_dir = os.path.join(args.test_directory, '*.avi')
 	# val_steps = count_frames(val_video_dir, batch_size=args.batch_size, time=args.time, camera_fps=args.camera_fps)
 
-	# video_loader_val_enc = video_generator(
-	# 						video_dir = args.test_directory,  
-	# 						frame_height=args.frame_height,
-	# 						frame_width=args.frame_width,
-	# 						frame_channels=args.frame_channels,
-	# 						batch_size = args.batch_size, 
-	# 						time = args.time,
-	# 						camera_fps = args.camera_fps,
-	# 						json_filename = "kinetics_val.json")
-	# enc_loader_val = encoder_loader(video_loader_val_enc, latent_dim=args.latent_dim, seed=seed, time_init=args.time)
-	# enc_losses_val = encoder_train.evaluate_generator(enc_loader_val, steps=val_steps)
-	# print('Encoder: ')
-	# print(encoder_train.metrics_names)
-	# print(enc_losses_val)
+	video_loader_val_enc = video_generator(
+							video_dir = args.test_directory,  
+							frame_height=args.frame_height,
+							frame_width=args.frame_width,
+							frame_channels=args.frame_channels,
+							batch_size = args.batch_size, 
+							time = args.time,
+							camera_fps = args.camera_fps,
+							json_filename = "kinetics_val.json")
+	enc_loader_val = encoder_loader(video_loader_val_enc, latent_dim=args.latent_dim, seed=seed, time_init=args.time)
+	enc_losses_val = encoder_train.evaluate_generator(enc_loader_val, steps=val_steps, verbose=1)
+	print('Encoder: ')
+	print(encoder_train.metrics_names)
+	print(enc_losses_val)
 
 	j = 0
 	while True:
@@ -246,12 +248,12 @@ def main(args):
 		# current_pred_frames = current_pred_frames.squeeze()
 
 		write_to_video(next_actual_frames, 
-			'results/{:03d}_actual.avi'.format(j),
+			'../results/{:03d}_actual.avi'.format(j),
 			frame_height=args.frame_height,
 			frame_width=args.frame_width,
 			video_fps=2)
 		write_to_video(next_pred_frames, 
-			'results/{:03d}_pred.avi'.format(j),
+			'../results/{:03d}_pred.avi'.format(j),
 			frame_height=args.frame_height,
 			frame_width=args.frame_width,
 			video_fps=2)
@@ -268,7 +270,7 @@ def main(args):
 
 if __name__=="__main__":
 	parser = argparse.ArgumentParser(description='Test the network')
-	parser.add_argument('-t', '--test_directory', type=str, default='data/kth_test')
+	parser.add_argument('-t', '--test_directory', type=str, default='../data/Human3.6M/test')
 	parser.add_argument('-p', '--predict_images', action='store_true')
 	parser.add_argument('-le', '--load_epoch', type=int, default=50)
 	parser.add_argument('-b', '--batch_size', type=int, default=1)
@@ -278,7 +280,7 @@ if __name__=="__main__":
 	parser.add_argument('-c', '--camera_fps', type=int, default=10)
 	parser.add_argument('-fh', '--frame_height', type=int, default=64)
 	parser.add_argument('-fw', '--frame_width', type=int, default=64)
-	parser.add_argument('-fc', '--frame_channels', type=int, default=1)
+	parser.add_argument('-fc', '--frame_channels', type=int, default=3)
 	args = parser.parse_args()
 
 	if args.trial:

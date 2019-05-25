@@ -77,7 +77,7 @@ def train(args):
 		# loss_weights=[1.])
 	print("\n\n\n-------------------------------- Encoder Train Summary --------------------------------\n")
 	encoder_train.summary()
-	plot_model(encoder_train, to_file='../models/encoder_train.png', show_shapes=True)
+	plot_model(encoder_train, to_file='../models/vaegan_encoder_train.png', show_shapes=True)
 
 	
 

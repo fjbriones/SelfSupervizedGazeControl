@@ -4,7 +4,7 @@ from keras.models import Model
 from keras.losses import mean_absolute_error
 from keras.layers import Layer
 # from keras.applications.mobilenet import 
-from SpectralNormalizationKeras import DenseSN, ConvSN3D
+from models.SpectralNormalizationKeras import DenseSN, ConvSN3D
 import keras.backend as K
 import tensorflow as tf
 

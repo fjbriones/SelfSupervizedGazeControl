@@ -3,8 +3,8 @@ sys.path.append('../')
 
 from generator.vaegan_generator import celeba_image_generator, humanm_image_generator
 from keras.models import load_model
-from models.vaegan_models import build_test_encoder
-from utils.utils import count_celeba_data
+from models.vaegan_models import build_test_encoder, build_encoder
+from utils.utils import count_celeba_data, count_humanm_data
 import numpy as np
 import argparse
 import cv2
@@ -60,23 +60,52 @@ def test(args):
 	seed = 0
 	rng = np.random.RandomState(seed)
 	enc = load_model(args.encoder_model)
-	enc_z = build_test_encoder(enc) 
+	gen = load_model(args.generator_model)
+	enc_z = build_test_encoder(enc)
+	enc_kl = build_encoder(enc, batch_size=args.batch_size, latent_dimension=args.latent_dimension)
 
-	test_steps = count_celeba_data(mode=2, batch_size=args.batch_size)
-	images_loader_test = image_generator(mode=2, rng=rng, batch_size=args.batch_size)
+	if (args.dataset == 'celeba'):
+		test_steps = count_celeba_data(mode=2, batch_size=args.batch_size)
+		images_loader_test = celeba_image_generator(mode=2, rng=rng, batch_size=args.batch_size)
+	elif (args.dataset == 'humanm'):
+		test_steps = count_humanm_data(video_dir='../data/Human3.6M/test', batch_size=args.batch_size)
+		images_loader_test = humanm_image_generator(video_dir='../data/Human3.6M/test', batch_size=args.batch_size)
 
-	enc_loss_avg = 0.
+	list_mse = []
+	list_kl = []
 
-	for step in range(test_steps):
+	for i in range(test_steps):
 		images_batch = next(images_loader_test)
-		enc_loss = np.squeeze(enc.predict_on_batch(images_batch))
-		print(enc_loss)
+		z = np.squeeze(enc_z.predict_on_batch(images_batch))
+		kl = np.mean(np.squeeze(enc_kl.predict_on_batch(images_batch)))
 
-		# print("Encoder batch {:03d} loss: {:.4f}".format(step, enc_loss))
+		#Generate image pixels from 0 to 1
+		generator_output = ((np.squeeze(gen.predict_on_batch(z)) + 1.0)/2.0)
+		images_normalized = (images_batch + 1.0)/2.0
 
-		# enc_loss_avg = ((enc_loss_avg * step) + enc_loss)/(step + 1)
+		mse = np.mean((generator_output - images_normalized) ** 2)
 
-	print("Encoder kl loss: {:.4f}".format(enc_loss_avg))
+		print('MSE: {:.4f} KL: {:.4f}'.format(mse, kl))
+
+		list_mse.append(mse)
+		list_kl.append(kl)
+
+	mean_mse = np.mean(np.asarray(list_mse))
+	mean_kl = np.mean(np.asarray(list_kl))
+
+	print('Mean mse: {:.4f}'.format(mean_mse))
+	print('Mean kl: {:.4f}'.format(mean_kl))
+
+	# enc_loss_avg = 0.
+
+	# for step in range(test_steps):
+	# 	images_batch = next(images_loader_test)
+	# 	enc_loss = np.squeeze(enc.predict_on_batch(images_batch))
+	# 	print(enc_loss)
+
+	# 	# print("Encoder batch {:03d} loss: {:.4f}".format(step, enc_loss))
+
+	# 	# enc_loss_avg = ((enc_loss_avg * step) + enc_loss)/(step + 1)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Test the vaegan network')
